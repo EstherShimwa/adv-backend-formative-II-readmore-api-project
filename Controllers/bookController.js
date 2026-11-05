@@ -3,12 +3,22 @@ const Book = require('../models/Book');
 const Author = require('../models/Author');
 
 const AUTHOR_FIELDS = 'name country bio';
+const CASE_INSENSITIVE = { locale: 'en', strength: 2 };
 
 // Helper: returns true only if the id is valid AND belongs to a real author
 const authorExists = async (authorId) => {
   if (!mongoose.Types.ObjectId.isValid(authorId)) return false;
   const found = await Author.exists({ _id: authorId });
   return Boolean(found);
+};
+
+// Helper: does this author already have a book with this title? (case-insensitive)
+// excludeBookId lets a book keep its own title when it is updated
+const titleTakenByAuthor = async (title, authorId, excludeBookId = null) => {
+  const filter = { author: authorId, title: title.trim() };
+  if (excludeBookId) filter._id = { $ne: excludeBookId };
+  const existing = await Book.findOne(filter).collation(CASE_INSENSITIVE);
+  return Boolean(existing);
 };
 
 // POST /books — create a book for an author
@@ -20,6 +30,13 @@ const createBook = async (req, res) => {
     if (!(await authorExists(author))) {
       return res.status(400).json({
         message: 'Cannot create book: "author" must be the id of an existing author',
+      });
+    }
+
+    // Rule 2: no duplicate titles for the same author
+    if (typeof title === 'string' && (await titleTakenByAuthor(title, author))) {
+      return res.status(409).json({
+        message: `This author already has a book titled "${title.trim()}"`,
       });
     }
 
@@ -85,6 +102,17 @@ const updateBook = async (req, res) => {
       return res.status(400).json({
         message: 'Cannot update book: "author" must be the id of an existing author',
       });
+    }
+
+    // Rule 2: the new title/author combination must not clash with another book
+    if (title !== undefined || author !== undefined) {
+      const newTitle = title !== undefined ? title : book.title;
+      const newAuthor = author !== undefined ? author : book.author;
+      if (typeof newTitle === 'string' && (await titleTakenByAuthor(newTitle, newAuthor, book._id))) {
+        return res.status(409).json({
+          message: `This author already has a book titled "${newTitle.trim()}"`,
+        });
+      }
     }
 
     if (title !== undefined) book.title = title;
