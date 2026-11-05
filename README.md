@@ -1,3 +1,129 @@
+# ReadMore API — My Implementation
+
+A REST API for a bookstore built with **Express.js**, **MongoDB Atlas** and **Mongoose**.
+Two linked entities: **Author** (one) ──< **Book** (many).
+
+**Video walkthrough:** _add your video link here_
+
+---
+
+## How to run it
+
+1. Clone the repo and install packages:
+   ```bash
+   git clone https://github.com/EstherShimwa/adv-backend-formative-II-readmore-api-project.git
+   cd adv-backend-formative-II-readmore-api-project
+   npm install
+   ```
+2. Copy `.env.example` to a new file called `.env` and add your MongoDB connection string:
+   ```
+   MONGO_URI=your_mongodb_connection_string
+   PORT=3000
+   ```
+3. Start the server:
+   ```bash
+   npm run dev
+   ```
+4. Check it works: `GET http://localhost:3000/` returns `{ "message": "ReadMore API is running" }`
+
+---
+
+## Project structure
+
+```
+├── server.js              ← connects to MongoDB, then starts the server
+├── models/
+│   ├── Author.js          ← name (required), country, bio
+│   └── Book.js            ← title, price, author (required), genre, publishedYear
+├── controllers/
+│   ├── authorController.js ← all author logic + delete policy + stats
+│   └── bookController.js   ← all book logic + business rules + filters
+└── routes/
+    ├── authorRoutes.js     ← maps /authors URLs to controller functions
+    └── bookRoutes.js       ← maps /books URLs to controller functions
+```
+
+Routes only map URLs to functions. All logic lives in the controllers.
+
+---
+
+## Endpoints
+
+### Authors
+| Method | Path | Description |
+|---|---|---|
+| POST | `/authors` | Create an author |
+| GET | `/authors` | Get all authors |
+| GET | `/authors/:id` | Get one author |
+| PUT | `/authors/:id` | Update an author |
+| DELETE | `/authors/:id` | Delete an author (blocked if they have books) |
+| GET | `/authors/:id/books` | All books by this author |
+| GET | `/authors/:id/stats` | Book count, average price, cheapest & most expensive book |
+
+### Books
+| Method | Path | Description |
+|---|---|---|
+| POST | `/books` | Create a book (must reference an existing author) |
+| GET | `/books` | Get all books — supports filters, search, sort, pagination |
+| GET | `/books/:id` | Get one book (author details populated) |
+| PUT | `/books/:id` | Update a book |
+| DELETE | `/books/:id` | Delete a book |
+
+---
+
+## Business rules
+
+| # | Rule | Status code |
+|---|---|---|
+| 1 | Book's author must exist (no orphan books) | **400** |
+| 2 | No duplicate titles for the same author (case-insensitive) | **409** |
+| 3 | Price must be > 0; year must be between 1450 and the current year | **422** |
+| 4 | Author with books cannot be deleted | **409** |
+| 5 | Dynamic filters on `GET /books` | — |
+| 6 | Author stats, with safe values when there are no books | — |
+
+Other responses: **404** when an id doesn't exist, **400** for a badly formatted id or invalid query values.
+
+### Why `required` isn't enough for Rule 1
+`required: true` only checks that *some* value was sent. MongoDB has no foreign keys, so a made-up author id would still be saved. The controller looks the author up before saving.
+
+### Rule 4 — Delete policy: **Block (Option A)**
+If an author still has books, `DELETE /authors/:id` returns **409** and lists the books in the way.
+
+**Why:** a real bookstore's books may already be sold and linked to orders and receipts. Cascading would silently destroy that history, and reassigning would show customers the wrong author. Blocking means nothing is lost by accident — a person decides what happens to each book.
+
+**Downside:** less convenient — removing an author takes extra steps, since their books must be deleted or reassigned first.
+
+### Rule 6 — No-books case
+An author with no books returns `bookCount: 0` and `null` for `averagePrice`, `cheapestBook` and `mostExpensiveBook`. `null` means "not applicable" — `0` would wrongly suggest free books.
+
+---
+
+## Query parameters for `GET /books`
+
+All optional, in any combination. Only the parameters sent are applied — no parameters returns everything.
+
+| Param | Effect |
+|---|---|
+| `genre` | Exact genre (case-insensitive) |
+| `minPrice` / `maxPrice` | Price range — either, both or neither |
+| `author` | Books by this author id |
+| `search` | Title contains this text (case-insensitive) |
+| `sort` | `price`, `title` or `publishedYear` |
+| `order` | `asc` (default) or `desc` |
+| `page` / `limit` | Pagination (limit defaults to 10, max 100) |
+
+Example:
+```
+GET /books?genre=Fiction&minPrice=10&maxPrice=20&sort=price&order=asc&page=1&limit=2
+```
+Response:
+```json
+{ "page": 1, "limit": 2, "total": 4, "totalPages": 2, "results": [ ... ] }
+```
+
+---
+
 # ReadMore API — Express + MongoDB (Mongoose)
 
 Your first backend API assignment. Build a small REST API for a bookstore using **Express.js**, with **MongoDB** as the database and **Mongoose** as the modelling layer.
