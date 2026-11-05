@@ -13,6 +13,8 @@ app.get('/', (req, res) => {
 });
 const authorRoutes = require('./routes/authorRoutes');
 app.use('/authors', authorRoutes);
+const bookRoutes = require('./routes/bookRoutes');
+app.use('/books', bookRoutes);
 const PORT = process.env.PORT || 3000;
 
 // Connect to MongoDB first, then start the server
