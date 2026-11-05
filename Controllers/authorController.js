@@ -74,9 +74,30 @@ const updateAuthor = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+// DELETE /authors/:id — delete an author
+const deleteAuthor = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid author id format' });
+    }
+
+    const author = await Author.findByIdAndDelete(id);
+    if (!author) {
+      return res.status(404).json({ message: `No author found with id ${id}` });
+    }
+
+    res.status(200).json({ message: 'Author deleted successfully', author });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 module.exports = {
   createAuthor,
   getAllAuthors,
   getAuthorById,
   updateAuthor,
+  deleteAuthor,
 };
