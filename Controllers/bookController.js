@@ -6,6 +6,8 @@ const AUTHOR_FIELDS = 'name country bio';
 const CASE_INSENSITIVE = { locale: 'en', strength: 2 };
 const MIN_YEAR = 1450;
 const SORTABLE_FIELDS = ['price', 'title', 'publishedYear'];
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
 
 // Helper: returns true only if the id is valid AND belongs to a real author
 const authorExists = async (authorId) => {
@@ -92,11 +94,11 @@ const createBook = async (req, res) => {
   }
 };
 
-// GET /books — get all books, with optional filters, search and sorting (Rule 5)
-// Example: /books?genre=Fiction&minPrice=10&maxPrice=30&search=sea&sort=price&order=asc
+// GET /books — filters, search, sorting (Rule 5) and pagination (challenge)
+// Example: /books?genre=Fiction&minPrice=10&maxPrice=30&search=sea&sort=price&order=asc&page=1&limit=5
 const getAllBooks = async (req, res) => {
   try {
-    const { genre, minPrice, maxPrice, author, search, sort, order } = req.query;
+    const { genre, minPrice, maxPrice, author, search, sort, order, page, limit } = req.query;
 
     // Start with an empty filter and only add what the client actually sent
     const filter = {};
@@ -141,8 +143,9 @@ const getAllBooks = async (req, res) => {
       filter.title = { $regex: escapeRegex(search.trim()), $options: 'i' };
     }
 
-    // Sorting: only allowed fields, ascending by default
-    let sortOption = {};
+    // Sorting: only allowed fields, ascending by default.
+    // _id is a tie-breaker so pages stay consistent when values are equal.
+    let sortOption = { _id: 1 };
     if (isPresent(sort)) {
       if (!SORTABLE_FIELDS.includes(sort)) {
         return res.status(400).json({
@@ -152,14 +155,38 @@ const getAllBooks = async (req, res) => {
       if (isPresent(order) && !['asc', 'desc'].includes(order)) {
         return res.status(400).json({ message: 'order must be "asc" or "desc"' });
       }
-      sortOption = { [sort]: order === 'desc' ? -1 : 1 };
+      sortOption = { [sort]: order === 'desc' ? -1 : 1, _id: 1 };
     }
 
-    const books = await Book.find(filter)
-      .sort(sortOption)
-      .populate('author', AUTHOR_FIELDS);
+    // Pagination: only applied when page or limit is sent
+    const usePaging = isPresent(page) || isPresent(limit);
+    const pageNum = isPresent(page) ? Number(page) : 1;
+    const limitNum = isPresent(limit) ? Number(limit) : DEFAULT_LIMIT;
 
-    res.status(200).json(books);
+    if (usePaging) {
+      if (!Number.isInteger(pageNum) || pageNum < 1) {
+        return res.status(400).json({ message: 'page must be a whole number of 1 or more' });
+      }
+      if (!Number.isInteger(limitNum) || limitNum < 1 || limitNum > MAX_LIMIT) {
+        return res.status(400).json({ message: `limit must be a whole number between 1 and ${MAX_LIMIT}` });
+      }
+    }
+
+    const total = await Book.countDocuments(filter);
+
+    let query = Book.find(filter).sort(sortOption).populate('author', AUTHOR_FIELDS);
+    if (usePaging) {
+      query = query.skip((pageNum - 1) * limitNum).limit(limitNum);
+    }
+    const books = await query;
+
+    res.status(200).json({
+      page: usePaging ? pageNum : 1,
+      limit: usePaging ? limitNum : total,
+      total,
+      totalPages: usePaging ? Math.ceil(total / limitNum) : 1,
+      results: books,
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
