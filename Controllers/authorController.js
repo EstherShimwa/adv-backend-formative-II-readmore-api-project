@@ -26,7 +26,6 @@ const getAllAuthors = async (req, res) => {
   }
 };
 
-
 // GET /authors/:id — get one author
 const getAuthorById = async (req, res) => {
   try {
@@ -77,6 +76,7 @@ const updateAuthor = async (req, res) => {
 };
 
 // DELETE /authors/:id — delete an author
+// Rule 4 policy: BLOCK (Option A) — an author who still has books cannot be deleted
 const deleteAuthor = async (req, res) => {
   try {
     const { id } = req.params;
@@ -85,11 +85,21 @@ const deleteAuthor = async (req, res) => {
       return res.status(400).json({ message: 'Invalid author id format' });
     }
 
-    const author = await Author.findByIdAndDelete(id);
+    const author = await Author.findById(id);
     if (!author) {
       return res.status(404).json({ message: `No author found with id ${id}` });
     }
 
+    // Rule 4: refuse if this author still has books, and show which ones
+    const books = await Book.find({ author: id }).select('title');
+    if (books.length > 0) {
+      return res.status(409).json({
+        message: `Cannot delete ${author.name}: they still have ${books.length} book(s). Delete or reassign these books first.`,
+        books: books.map((book) => ({ id: book._id, title: book.title })),
+      });
+    }
+
+    await author.deleteOne();
     res.status(200).json({ message: 'Author deleted successfully', author });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -120,6 +130,7 @@ const getBooksByAuthor = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 module.exports = {
   createAuthor,
   getAllAuthors,
