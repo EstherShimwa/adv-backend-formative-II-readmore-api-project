@@ -1,11 +1,30 @@
 const mongoose = require('mongoose');
 const Book = require('../models/Book');
+const Author = require('../models/Author');
+
+const AUTHOR_FIELDS = 'name country bio';
+
+// Helper: returns true only if the id is valid AND belongs to a real author
+const authorExists = async (authorId) => {
+  if (!mongoose.Types.ObjectId.isValid(authorId)) return false;
+  const found = await Author.exists({ _id: authorId });
+  return Boolean(found);
+};
 
 // POST /books — create a book for an author
 const createBook = async (req, res) => {
   try {
     const { title, genre, price, publishedYear, author } = req.body || {};
+
+    // Rule 1: no orphan books
+    if (!(await authorExists(author))) {
+      return res.status(400).json({
+        message: 'Cannot create book: "author" must be the id of an existing author',
+      });
+    }
+
     const book = await Book.create({ title, genre, price, publishedYear, author });
+    await book.populate('author', AUTHOR_FIELDS);
     res.status(201).json(book);
   } catch (err) {
     if (err.name === 'ValidationError' || err.name === 'CastError') {
@@ -15,11 +34,10 @@ const createBook = async (req, res) => {
   }
 };
 
-
 // GET /books — get all books (with author details)
 const getAllBooks = async (req, res) => {
   try {
-    const books = await Book.find().populate('author', 'name country bio');
+    const books = await Book.find().populate('author', AUTHOR_FIELDS);
     res.status(200).json(books);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -35,7 +53,7 @@ const getBookById = async (req, res) => {
       return res.status(400).json({ message: 'Invalid book id format' });
     }
 
-    const book = await Book.findById(id).populate('author', 'name country bio');
+    const book = await Book.findById(id).populate('author', AUTHOR_FIELDS);
     if (!book) {
       return res.status(404).json({ message: `No book found with id ${id}` });
     }
@@ -61,6 +79,14 @@ const updateBook = async (req, res) => {
     }
 
     const { title, genre, price, publishedYear, author } = req.body || {};
+
+    // Rule 1: if the author is being changed, it must be a real author
+    if (author !== undefined && !(await authorExists(author))) {
+      return res.status(400).json({
+        message: 'Cannot update book: "author" must be the id of an existing author',
+      });
+    }
+
     if (title !== undefined) book.title = title;
     if (genre !== undefined) book.genre = genre;
     if (price !== undefined) book.price = price;
@@ -68,7 +94,7 @@ const updateBook = async (req, res) => {
     if (author !== undefined) book.author = author;
 
     const updatedBook = await book.save();
-    await updatedBook.populate('author', 'name country bio');
+    await updatedBook.populate('author', AUTHOR_FIELDS);
     res.status(200).json(updatedBook);
   } catch (err) {
     if (err.name === 'ValidationError' || err.name === 'CastError') {
@@ -97,6 +123,7 @@ const deleteBook = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 module.exports = {
   createBook,
   getAllBooks,
