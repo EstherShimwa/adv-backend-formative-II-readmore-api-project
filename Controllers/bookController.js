@@ -25,7 +25,28 @@ const getAllBooks = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+// GET /books/:id — get one book (with author details)
+const getBookById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid book id format' });
+    }
+
+    const book = await Book.findById(id).populate('author', 'name country bio');
+    if (!book) {
+      return res.status(404).json({ message: `No book found with id ${id}` });
+    }
+
+    res.status(200).json(book);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 module.exports = {
   createBook,
   getAllBooks,
+  getBookById,
 };
