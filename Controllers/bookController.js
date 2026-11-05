@@ -15,6 +15,17 @@ const createBook = async (req, res) => {
   }
 };
 
+
+// GET /books — get all books (with author details)
+const getAllBooks = async (req, res) => {
+  try {
+    const books = await Book.find().populate('author', 'name country bio');
+    res.status(200).json(books);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 module.exports = {
   createBook,
+  getAllBooks,
 };
