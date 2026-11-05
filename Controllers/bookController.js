@@ -5,6 +5,7 @@ const Author = require('../models/Author');
 const AUTHOR_FIELDS = 'name country bio';
 const CASE_INSENSITIVE = { locale: 'en', strength: 2 };
 const MIN_YEAR = 1450;
+const SORTABLE_FIELDS = ['price', 'title', 'publishedYear'];
 
 // Helper: returns true only if the id is valid AND belongs to a real author
 const authorExists = async (authorId) => {
@@ -49,6 +50,12 @@ const getRuleErrors = ({ price, publishedYear }) => {
   return errors;
 };
 
+// Helper: was this query parameter actually sent with a value?
+const isPresent = (value) => typeof value === 'string' && value.trim() !== '';
+
+// Helper: escape special regex characters so user text is searched literally
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // POST /books — create a book for an author
 const createBook = async (req, res) => {
   try {
@@ -85,10 +92,73 @@ const createBook = async (req, res) => {
   }
 };
 
-// GET /books — get all books (with author details)
+// GET /books — get all books, with optional filters, search and sorting (Rule 5)
+// Example: /books?genre=Fiction&minPrice=10&maxPrice=30&search=sea&sort=price&order=asc
 const getAllBooks = async (req, res) => {
   try {
-    const books = await Book.find().populate('author', AUTHOR_FIELDS);
+    const { genre, minPrice, maxPrice, author, search, sort, order } = req.query;
+
+    // Start with an empty filter and only add what the client actually sent
+    const filter = {};
+
+    if (isPresent(genre)) {
+      filter.genre = new RegExp(`^${escapeRegex(genre.trim())}$`, 'i');
+    }
+
+    if (isPresent(minPrice) || isPresent(maxPrice)) {
+      filter.price = {};
+
+      if (isPresent(minPrice)) {
+        const min = Number(minPrice);
+        if (Number.isNaN(min)) {
+          return res.status(400).json({ message: 'minPrice must be a number' });
+        }
+        filter.price.$gte = min;
+      }
+
+      if (isPresent(maxPrice)) {
+        const max = Number(maxPrice);
+        if (Number.isNaN(max)) {
+          return res.status(400).json({ message: 'maxPrice must be a number' });
+        }
+        filter.price.$lte = max;
+      }
+
+      if (filter.price.$gte !== undefined && filter.price.$lte !== undefined
+        && filter.price.$gte > filter.price.$lte) {
+        return res.status(400).json({ message: 'minPrice cannot be greater than maxPrice' });
+      }
+    }
+
+    if (isPresent(author)) {
+      if (!mongoose.Types.ObjectId.isValid(author)) {
+        return res.status(400).json({ message: 'author must be a valid author id' });
+      }
+      filter.author = author;
+    }
+
+    if (isPresent(search)) {
+      filter.title = { $regex: escapeRegex(search.trim()), $options: 'i' };
+    }
+
+    // Sorting: only allowed fields, ascending by default
+    let sortOption = {};
+    if (isPresent(sort)) {
+      if (!SORTABLE_FIELDS.includes(sort)) {
+        return res.status(400).json({
+          message: `sort must be one of: ${SORTABLE_FIELDS.join(', ')}`,
+        });
+      }
+      if (isPresent(order) && !['asc', 'desc'].includes(order)) {
+        return res.status(400).json({ message: 'order must be "asc" or "desc"' });
+      }
+      sortOption = { [sort]: order === 'desc' ? -1 : 1 };
+    }
+
+    const books = await Book.find(filter)
+      .sort(sortOption)
+      .populate('author', AUTHOR_FIELDS);
+
     res.status(200).json(books);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

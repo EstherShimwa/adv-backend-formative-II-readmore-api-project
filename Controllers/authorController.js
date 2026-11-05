@@ -131,6 +131,49 @@ const getBooksByAuthor = async (req, res) => {
   }
 };
 
+// GET /authors/:id/stats — summary of one author's books (Rule 6)
+const getAuthorStats = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid author id format' });
+    }
+
+    const author = await Author.findById(id);
+    if (!author) {
+      return res.status(404).json({ message: `No author found with id ${id}` });
+    }
+
+    // Cheapest first; if two books cost the same, alphabetical title decides
+    const books = await Book.find({ author: id }).sort({ price: 1, title: 1 });
+
+    // No books: return sensible "not applicable" values instead of crashing
+    if (books.length === 0) {
+      return res.status(200).json({
+        author: author.name,
+        bookCount: 0,
+        averagePrice: null,
+        cheapestBook: null,
+        mostExpensiveBook: null,
+      });
+    }
+
+    const total = books.reduce((sum, book) => sum + book.price, 0);
+    const averagePrice = Math.round((total / books.length) * 100) / 100;
+
+    res.status(200).json({
+      author: author.name,
+      bookCount: books.length,
+      averagePrice,
+      cheapestBook: books[0].title,
+      mostExpensiveBook: books[books.length - 1].title,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 module.exports = {
   createAuthor,
   getAllAuthors,
@@ -138,4 +181,5 @@ module.exports = {
   updateAuthor,
   deleteAuthor,
   getBooksByAuthor,
+  getAuthorStats,
 };
