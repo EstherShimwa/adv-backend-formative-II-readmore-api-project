@@ -4,6 +4,7 @@ const Author = require('../models/Author');
 
 const AUTHOR_FIELDS = 'name country bio';
 const CASE_INSENSITIVE = { locale: 'en', strength: 2 };
+const MIN_YEAR = 1450;
 
 // Helper: returns true only if the id is valid AND belongs to a real author
 const authorExists = async (authorId) => {
@@ -21,6 +22,33 @@ const titleTakenByAuthor = async (title, authorId, excludeBookId = null) => {
   return Boolean(existing);
 };
 
+// Helper: business rules for price and publishedYear (Rule 3)
+// Returns a list of error messages — empty list means everything is fine
+const getRuleErrors = ({ price, publishedYear }) => {
+  const errors = [];
+
+  if (price !== undefined) {
+    if (typeof price !== 'number' || Number.isNaN(price)) {
+      errors.push('price must be a number');
+    } else if (price <= 0) {
+      errors.push('price must be greater than 0');
+    }
+  }
+
+  if (publishedYear !== undefined) {
+    const currentYear = new Date().getFullYear();
+    if (!Number.isInteger(publishedYear)) {
+      errors.push('publishedYear must be a whole number');
+    } else if (publishedYear > currentYear) {
+      errors.push(`publishedYear cannot be in the future (after ${currentYear})`);
+    } else if (publishedYear < MIN_YEAR) {
+      errors.push(`publishedYear cannot be before ${MIN_YEAR}`);
+    }
+  }
+
+  return errors;
+};
+
 // POST /books — create a book for an author
 const createBook = async (req, res) => {
   try {
@@ -31,6 +59,12 @@ const createBook = async (req, res) => {
       return res.status(400).json({
         message: 'Cannot create book: "author" must be the id of an existing author',
       });
+    }
+
+    // Rule 3: price and year must make sense
+    const ruleErrors = getRuleErrors({ price, publishedYear });
+    if (ruleErrors.length > 0) {
+      return res.status(422).json({ message: 'Invalid book data', errors: ruleErrors });
     }
 
     // Rule 2: no duplicate titles for the same author
@@ -102,6 +136,12 @@ const updateBook = async (req, res) => {
       return res.status(400).json({
         message: 'Cannot update book: "author" must be the id of an existing author',
       });
+    }
+
+    // Rule 3: price and year must make sense (only the fields being changed)
+    const ruleErrors = getRuleErrors({ price, publishedYear });
+    if (ruleErrors.length > 0) {
+      return res.status(422).json({ message: 'Invalid book data', errors: ruleErrors });
     }
 
     // Rule 2: the new title/author combination must not clash with another book
