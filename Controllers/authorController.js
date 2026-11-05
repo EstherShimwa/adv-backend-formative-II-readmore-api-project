@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Author = require('../models/Author');
+const Book = require('../models/Book');
 
 // POST /authors — create a new author
 const createAuthor = async (req, res) => {
@@ -94,10 +95,36 @@ const deleteAuthor = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+// GET /authors/:id/books — all books by one author
+const getBooksByAuthor = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid author id format' });
+    }
+
+    const author = await Author.findById(id);
+    if (!author) {
+      return res.status(404).json({ message: `No author found with id ${id}` });
+    }
+
+    const books = await Book.find({ author: id });
+    res.status(200).json({
+      author: author.name,
+      count: books.length,
+      books,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 module.exports = {
   createAuthor,
   getAllAuthors,
   getAuthorById,
   updateAuthor,
   deleteAuthor,
+  getBooksByAuthor,
 };
