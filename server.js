@@ -11,7 +11,8 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({ message: 'ReadMore API is running' });
 });
-
+const authorRoutes = require('./routes/authorRoutes');
+app.use('/authors', authorRoutes);
 const PORT = process.env.PORT || 3000;
 
 // Connect to MongoDB first, then start the server
