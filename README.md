@@ -3,7 +3,7 @@
 A REST API for a bookstore built with **Express.js**, **MongoDB Atlas** and **Mongoose**.
 Two linked entities: **Author** (one) ──< **Book** (many).
 
-**Video walkthrough:** _add your video link here_
+**Video walkthrough:** (https://youtu.be/WdtE0hEhJu0)
 
 ---
 
